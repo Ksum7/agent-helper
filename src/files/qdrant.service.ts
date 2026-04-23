@@ -29,7 +29,7 @@ export class QdrantService implements OnModuleInit {
     }
   }
 
-  async upsert(userId: string, fileId: string, text: string): Promise<string> {
+  async upsert(userId: string, fileId: string, text: string, sessionId?: string): Promise<string> {
     const vector = await this.embed(text);
     const pointId = randomUUID();
 
@@ -38,7 +38,7 @@ export class QdrantService implements OnModuleInit {
         {
           id: pointId,
           vector,
-          payload: { userId, fileId, text: text.slice(0, 500) },
+          payload: { userId, fileId, sessionId, text: text.slice(0, 500) },
         },
       ],
     });

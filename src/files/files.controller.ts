@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -25,8 +26,9 @@ export class FilesController {
   upload(
     @User() user: { sub: string },
     @UploadedFile() file: Express.Multer.File,
+    @Query('sessionId') sessionId?: string,
   ) {
-    return this.filesService.upload(user.sub, file);
+    return this.filesService.upload(user.sub, file, sessionId);
   }
 
   @Get()

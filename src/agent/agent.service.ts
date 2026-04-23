@@ -16,10 +16,11 @@ export class AgentService {
 
   async *stream(
     userId: string,
+    sessionId: string,
     history: Message[],
     input: string,
   ): AsyncGenerator<string> {
-    const agent = this.createAgent(userId);
+    const agent = this.createAgent(userId, sessionId);
     const messages = this.buildMessages(history, input);
 
     const stream = await agent.stream(
@@ -35,10 +36,10 @@ export class AgentService {
     }
   }
 
-  private createAgent(userId: string) {
+  private createAgent(userId: string, sessionId: string) {
     const llmUrl = this.config.getOrThrow<string>('LLM_URL');
     const llmModel = this.config.getOrThrow<string>('LLM_MODEL');
-    const tools = buildTools(userId, this.httpService, this.config, this.memoryService);
+    const tools = buildTools(userId, sessionId, this.httpService, this.config, this.memoryService);
 
     return createChatAgent({ llmUrl, llmModel, tools });
   }

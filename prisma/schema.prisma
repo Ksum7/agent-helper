@@ -23,8 +23,9 @@ model ChatSession {
   title     String
   createdAt DateTime @default(now())
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  files     FileRecord[] @relation("ChatSessionFiles")
 }
 
 model Message {
@@ -60,7 +61,9 @@ model FileRecord {
   qdrantId  String?
   createdAt DateTime @default(now())
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  chatSession ChatSession? @relation("ChatSessionFiles", fields: [sessionId], references: [id], onDelete: SetNull)
+  sessionId String?
 }
 

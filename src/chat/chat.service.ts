@@ -27,6 +27,7 @@ export class ChatService {
     let reply = '';
     for await (const chunk of this.agentService.stream(
       userId,
+      sessionId,
       history,
       content,
     )) {

@@ -9,12 +9,13 @@ import { memoryTools } from './memory.tool';
 
 export function buildTools(
   userId: string,
+  sessionId: string,
   httpService: HttpService,
   config: ConfigService,
   memoryService: MemoryService,
 ): StructuredTool[] {
   return [
-    searchUserFilesTool(userId, config, httpService),
+    searchUserFilesTool(userId, sessionId, config, httpService),
     searchWebTool(httpService, config),
     browseUrlTool(httpService),
     ...memoryTools(userId, memoryService),

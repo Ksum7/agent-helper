@@ -9,6 +9,7 @@ const COLLECTION = 'user_files';
 
 export const searchUserFilesTool = (
   userId: string,
+  sessionId: string,
   config: ConfigService,
   httpService: HttpService,
 ) => {
@@ -22,7 +23,10 @@ export const searchUserFilesTool = (
           vector,
           limit: limit ?? 5,
           filter: {
-            must: [{ key: 'userId', match: { value: userId } }],
+            must: [
+              { key: 'userId', match: { value: userId } },
+              { key: 'sessionId', match: { value: sessionId } },
+            ],
           },
         });
 
@@ -47,11 +51,11 @@ export const searchUserFilesTool = (
     {
       name: 'search_user_files',
       description:
-        'Search through user uploaded files to find relevant information. Returns matching file snippets with file IDs.',
+        'Search through files uploaded in this chat session to find relevant information. Returns matching file snippets with file IDs.',
       schema: z.object({
         query: z
           .string()
-          .describe('Search query to find relevant content in user files'),
+          .describe('Search query to find relevant content in session files'),
         limit: z
           .number()
           .int()
