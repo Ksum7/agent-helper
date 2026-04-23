@@ -69,18 +69,15 @@ async function embedText(
   config: ConfigService,
   httpService: HttpService,
 ): Promise<number[]> {
-  const ollamaUrl = config.getOrThrow<string>('OLLAMA_URL');
-  const model = config.get('EMBED_MODEL', 'nomic-embed-text');
+  const embedUrl = config.getOrThrow<string>('EMBED_URL');
+  const model = config.getOrThrow<string>('EMBED_MODEL');
 
   const { data } = await firstValueFrom(
-    httpService.post<{ embedding: number[] }>(
-      `${ollamaUrl}/api/embeddings`,
-      {
-        model,
-        prompt: text,
-      },
+    httpService.post<{ data: { embedding: number[] }[] }>(
+      `${embedUrl}/embeddings`,
+      { model, input: text },
     ),
   );
 
-  return data.embedding;
+  return data.data[0].embedding;
 }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { Message } from '@prisma/client';
+import { MemoryService } from '../memory/memory.service';
 import { createChatAgent } from './agent-factory';
 import { buildTools } from './tools';
 
@@ -10,6 +11,7 @@ export class AgentService {
   constructor(
     private readonly config: ConfigService,
     private readonly httpService: HttpService,
+    private readonly memoryService: MemoryService,
   ) {}
 
   async *stream(
@@ -36,7 +38,7 @@ export class AgentService {
   private createAgent(userId: string) {
     const llmUrl = this.config.getOrThrow<string>('LLM_URL');
     const llmModel = this.config.getOrThrow<string>('LLM_MODEL');
-    const tools = buildTools(userId, this.httpService, this.config);
+    const tools = buildTools(userId, this.httpService, this.config, this.memoryService);
 
     return createChatAgent({ llmUrl, llmModel, tools });
   }

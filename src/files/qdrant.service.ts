@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
 
 const COLLECTION = 'user_files';
-const VECTOR_SIZE = 768;
+const VECTOR_SIZE = 384;
 
 @Injectable()
 export class QdrantService implements OnModuleInit {
@@ -63,19 +63,16 @@ export class QdrantService implements OnModuleInit {
   }
 
   private async embed(text: string): Promise<number[]> {
-    const ollamaUrl = this.config.getOrThrow<string>('OLLAMA_URL');
-    const model = this.config.get('EMBED_MODEL', 'nomic-embed-text');
+    const embedUrl = this.config.getOrThrow<string>('EMBED_URL');
+    const model = this.config.getOrThrow<string>('EMBED_MODEL');
 
     const { data } = await firstValueFrom(
-      this.httpService.post<{ embedding: number[] }>(
-        `${ollamaUrl}/api/embeddings`,
-        {
-          model,
-          prompt: text,
-        },
+      this.httpService.post<{ data: { embedding: number[] }[] }>(
+        `${embedUrl}/embeddings`,
+        { model, input: text },
       ),
     );
 
-    return data.embedding;
+    return data.data[0].embedding;
   }
 }
