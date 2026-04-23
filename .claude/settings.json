@@ -7,6 +7,6 @@
       "Bash(git *)",
       "Bash(npx prisma *)"
     ],
-    "deny": ["Read(./.env)", "Read(./.env.*)"]
+    "deny": ["Read(./.env)"]
   }
 }

@@ -5,28 +5,29 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 ## Стек
 
 - **Backend:** NestJS (TypeScript)
-- **LLM:** OpenAI-compatible (vLLM/Ollama)
+- **LLM:** vLLM — модель `Qwen/Qwen3-14B` (AWQ, max-model-len 4096)
 - **Agent:** LangChain v1.3.3 + LangGraph v1.2.9
-- **Embeddings:** Ollama + nomic-embed-text
+- **Embeddings:** vLLM — модель `intfloat/e5-small-v2`
+- **Reranker:** vLLM — модель `BAAI/bge-reranker-v2-m3`
 - **Vector DB:** Qdrant
-- **DB:** PostgreSQL (Prisma 6)
+- **DB:** PostgreSQL (Prisma 7)
 - **Cache:** Redis
 - **Files:** MinIO
-- **Infrastructure:** Docker Compose (dev)
+- **Infrastructure:** Docker Compose (dev) — 3 vLLM-сервиса (llm, embed, rerank) + postgres + redis + qdrant + minio
 
 ## Модули
 
 - `auth` — JWT (cookie), email
 - `chat` — WebSocket + async streaming
 - `agent` — LangChain `createChatAgent` с инструментами
-- `files` — Управление файлами: MinIO (хранилище) + PostgreSQL (метаданные) + Qdrant (embeddings для searchable типов)
+- `files` — Управление файлами: MinIO (хранилище) + PostgreSQL (метаданные) + Qdrant (embeddings); `TextExtractorService` для извлечения текста из файлов
 - `memory` — PostgreSQL (upsert/search)
 - `mcp` — стаб для MCP серверов
 
 ## Агент (src/agent/)
 
 **Структура:**
-- `agent-factory.ts` — `createChatAgent(llmUrl, llmModel, tools, systemPrompt)`
+- `agent-factory.ts` — `createChatAgent({ llmUrl, llmModel, tools, systemPrompt })`
 - `agent.service.ts` — AgentService.stream(userId, history, input)
 - `tools/` — searchUserFiles (RAG по документам), searchWeb, browseUrl
 
@@ -47,9 +48,13 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
   "langchain": "^1.3.3",
   "@nestjs/*": "^11.1.19",
   "prisma": "^7.8.0",
+  "@prisma/client": "^7.8.0",
+  "@qdrant/js-client-rest": "^1.12.0",
   "pdf-parse": "^2.4.5",
   "mammoth": "^1.12.0",
-  "exceljs": "^4.4.0"
+  "exceljs": "^4.4.0",
+  "nestjs-zod": "^5.0.1",
+  "zod": "^4.1.12"
 }
 ```
 
