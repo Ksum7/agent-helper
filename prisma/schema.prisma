@@ -12,11 +12,10 @@ model User {
   password  String
   createdAt DateTime @default(now())
 
-  messages   Message[]
-  memories   Memory[]
-  files      FileRecord[]
-  mcpServers McpServer[]
-  sessions   ChatSession[]
+  messages Message[]
+  memories Memory[]
+  files    FileRecord[]
+  sessions ChatSession[]
 }
 
 model ChatSession {
@@ -65,14 +64,3 @@ model FileRecord {
   userId String
 }
 
-model McpServer {
-  id        String   @id @default(cuid())
-  name      String
-  url       String
-  createdAt DateTime @default(now())
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
-
-  @@unique([userId, name])
-}

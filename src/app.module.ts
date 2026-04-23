@@ -6,7 +6,6 @@ import { ChatModule } from './chat/chat.module';
 import { AgentModule } from './agent/agent.module';
 import { FilesModule } from './files/files.module';
 import { MemoryModule } from './memory/memory.module';
-import { McpModule } from './mcp/mcp.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -18,7 +17,6 @@ import { PrismaModule } from './prisma/prisma.module';
     AgentModule,
     FilesModule,
     MemoryModule,
-    McpModule,
   ],
   controllers: [AppController],
 })

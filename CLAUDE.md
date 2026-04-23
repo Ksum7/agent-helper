@@ -19,22 +19,23 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 
 - `auth` — JWT (cookie), email
 - `chat` — WebSocket + async streaming
-- `agent` — LangChain `createChatAgent` с инструментами
+- `agent` — LangChain `createChatAgent` с встроенными инструментами
 - `files` — Управление файлами: MinIO (хранилище) + PostgreSQL (метаданные) + Qdrant (embeddings); `TextExtractorService` для извлечения текста из файлов
 - `memory` — PostgreSQL (upsert/search)
-- `mcp` — стаб для MCP серверов
 
 ## Агент (src/agent/)
 
 **Структура:**
-- `agent-factory.ts` — `createChatAgent({ llmUrl, llmModel, tools, systemPrompt })`
+- `agent-factory.ts` — `createChatAgent({ llmUrl, llmModel, tools })`
 - `agent.service.ts` — AgentService.stream(userId, history, input)
-- `tools/` — searchUserFiles (RAG по документам), searchWeb, browseUrl
+- `tools/` — встроенные инструменты: searchUserFiles, searchWeb, browseUrl
 
-**Инструменты:**
+**Встроенные инструменты (только предустановленные):**
 - `search_user_files` — Поиск в embeddings загруженных файлов (PDF, DOCX, XLSX, TXT, MD → Qdrant)
 - `search_web` — Поиск в интернете
 - `browse_url` — Скачивание и парсинг URL
+
+**Безопасность:** Кастомные MCP серверы отключены. Пользователи не могут подключать сторонние MCP — поддерживаются только предустановленные инструменты для исключения рисков выполнения произвольного кода.
 
 **API:** новый LangChain v1 — агент.stream({messages}, {streamMode: 'values'})
 

@@ -21,6 +21,6 @@ export const browseUrlTool = (httpService: HttpService) =>
     {
       name: 'browseUrl',
       description: 'Fetch and extract text content from a URL',
-      schema: z.object({ url: z.string().url().describe('URL to browse') }),
+      schema: z.object({ url: z.string().describe('URL to browse') }),
     },
   );
