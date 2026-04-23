@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MinioService } from './minio.service';
 import { QdrantService } from './qdrant.service';
+import { TextExtractorService } from './text-extractor.service';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -10,30 +11,34 @@ export class FilesService {
     private readonly prisma: PrismaService,
     private readonly minio: MinioService,
     private readonly qdrant: QdrantService,
+    private readonly textExtractor: TextExtractorService,
   ) {}
 
   async upload(userId: string, file: Express.Multer.File) {
     const key = `${userId}/${randomUUID()}-${file.originalname}`;
     await this.minio.upload(key, file.buffer, file.mimetype);
 
-    let qdrantId: string | undefined;
-    if (
-      file.mimetype.startsWith('text/') ||
-      file.mimetype === 'application/pdf'
-    ) {
-      const text = file.buffer.toString('utf-8');
-      qdrantId = await this.qdrant.upsert(userId, key, text);
-    }
-
-    return this.prisma.fileRecord.create({
+    const record = await this.prisma.fileRecord.create({
       data: {
         userId,
         filename: file.originalname,
         mimeType: file.mimetype,
         minioKey: key,
-        qdrantId,
+        qdrantId: null,
       },
     });
+
+    let qdrantId: string | undefined;
+    if (this.textExtractor.isSupported(file.mimetype)) {
+      const text = await this.textExtractor.extract(file);
+      qdrantId = await this.qdrant.upsert(userId, record.id, text);
+      await this.prisma.fileRecord.update({
+        where: { id: record.id },
+        data: { qdrantId },
+      });
+    }
+
+    return record;
   }
 
   async getStream(userId: string, fileId: string) {
