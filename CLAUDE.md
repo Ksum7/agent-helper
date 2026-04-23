@@ -84,6 +84,25 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 - Рассказывать какие файлы доступны (из списка)
 - Удалять файлы (если явно запросил пользователь)
 
+## Testing
+
+**Тесты:** 63 unit тестов (все ✅ passing)
+- `npm test` — запустить все тесты
+- `npm test -- --watch` — watch mode
+- `npm run test:cov` — coverage report
+
+**Покрытие:**
+- `auth`: service (register/login/me), guard (JWT validation, cookie extraction)
+- `chat`: controller (session CRUD, SSE), service (async streaming), gateway (WebSocket)
+- `files`: service (upload/list/delete with Qdrant), controller (sessionId), text-extractor (MIME validation)
+- `memory`: service (delegation), repository (Prisma CRUD)
+
+**Test patterns:**
+- `Test.createTestingModule` + `useValue` mocks
+- `jest.fn()` with `.mockImplementation()` for Prisma (避免 type issues)
+- Async generator testing for streaming APIs
+- Socket.io stub for WebSocket tests
+
 ## Разработка и актуальность
 
 **Context7 MCP** — используй для:

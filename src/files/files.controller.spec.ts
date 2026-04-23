@@ -43,7 +43,22 @@ describe('FilesController', () => {
   });
 
   describe('POST /files', () => {
-    it('uploads file and returns record', async () => {
+    it('uploads file with sessionId', async () => {
+      const record = {
+        id: '1',
+        filename: 'test.txt',
+        mimeType: 'text/plain',
+        createdAt: new Date(),
+      };
+      filesService.upload.mockResolvedValue(record as any);
+
+      const result = await controller.upload(mockUser, mockFile, 'session-1');
+
+      expect(filesService.upload).toHaveBeenCalledWith('user-1', mockFile, 'session-1');
+      expect(result).toEqual(record);
+    });
+
+    it('uploads file without sessionId', async () => {
       const record = {
         id: '1',
         filename: 'test.txt',
@@ -54,7 +69,7 @@ describe('FilesController', () => {
 
       const result = await controller.upload(mockUser, mockFile);
 
-      expect(filesService.upload).toHaveBeenCalledWith('user-1', mockFile);
+      expect(filesService.upload).toHaveBeenCalledWith('user-1', mockFile, undefined);
       expect(result).toEqual(record);
     });
   });
