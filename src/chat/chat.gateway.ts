@@ -3,22 +3,27 @@ import {
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 import { ChatService } from './chat.service';
 
 @WebSocketGateway({ cors: { origin: '*', credentials: true } })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
   server!: Server;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
+    private readonly configService: ConfigService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -40,6 +45,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     client.data.user = null;
+  }
+
+  async afterInit(server: Server) {
+    const redisHost = this.configService.get('REDIS_HOST', 'localhost');
+    const redisPort = this.configService.get('REDIS_PORT', 6379);
+
+    const pubClient = createClient({ socket: { host: redisHost, port: redisPort } });
+    const subClient = pubClient.duplicate();
+
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+
+    server.adapter(createAdapter(pubClient, subClient));
   }
 
   @SubscribeMessage('message')

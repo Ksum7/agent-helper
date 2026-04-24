@@ -1,4 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { Socket } from 'socket.io';
@@ -7,6 +8,7 @@ describe('ChatGateway', () => {
   let gateway: ChatGateway;
   let jwtService: jest.Mocked<JwtService>;
   let chatService: jest.Mocked<ChatService>;
+  let configService: jest.Mocked<ConfigService>;
 
   beforeEach(() => {
     jwtService = {
@@ -17,7 +19,11 @@ describe('ChatGateway', () => {
       stream: jest.fn(),
     } as any;
 
-    gateway = new ChatGateway(jwtService, chatService);
+    configService = {
+      get: jest.fn((key: string, defaultValue?: any) => defaultValue),
+    } as any;
+
+    gateway = new ChatGateway(jwtService, chatService, configService);
   });
 
   const mockSocket = (token?: string, cookie?: string) => {

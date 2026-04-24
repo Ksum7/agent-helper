@@ -103,6 +103,42 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 - Async generator testing for streaming APIs
 - Socket.io stub for WebSocket tests
 
+## Кластеризация (PM2 + Redis)
+
+**Включено с апреля 2026:** Redis адаптер для Socket.io синхронизирует WebSocket сессии между инстансами.
+
+**Запуск кластера:**
+```bash
+npm run build
+npm run cluster:start        # Запустить по количеству ядер CPU
+pm2 status                   # Проверить статус
+npm run cluster:logs         # Смотреть логи
+```
+
+**Требования:**
+- Redis на localhost:6379 (переменная `REDIS_HOST`, `REDIS_PORT` в `.env`)
+- PM2 установлен (`npm install pm2` уже в devDependencies)
+
+**Структура:**
+- `ecosystem.config.js` — конфиг PM2 (cluster mode, graceful reload, etc.)
+- `nginx.conf` — load balancer для балансировки трафика между инстансами
+- `chat.gateway.ts::afterInit()` — инициализация Redis адаптера для Socket.io
+- `CLUSTER.md` — полная документация
+
+**Команды:**
+| Command | Effect |
+|---------|--------|
+| `npm run cluster:start` | Запустить кластер |
+| `npm run cluster:reload` | Graceful reload (без downtime) |
+| `npm run cluster:stop` | Остановить |
+| `npm run cluster:monit` | Live мониторинг |
+
+**Чего это дает:**
+- ✅ Используются все ядра CPU
+- ✅ Отказоустойчивость (если один инстанс упадет)
+- ✅ Zero-downtime deployments
+- ✅ WebSocket сессии синхронизируются через Redis
+
 ## Разработка и актуальность
 
 **Context7 MCP** — используй для:

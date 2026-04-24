@@ -46,8 +46,12 @@ describe('FilesController', () => {
     it('uploads file with sessionId', async () => {
       const record = {
         id: '1',
+        sessionId: 'session-1',
         filename: 'test.txt',
         mimeType: 'text/plain',
+        userId: 'user-1',
+        minioKey: 'key1',
+        qdrantId: null,
         createdAt: new Date(),
       };
       filesService.upload.mockResolvedValue(record as any);
@@ -61,8 +65,12 @@ describe('FilesController', () => {
     it('uploads file without sessionId', async () => {
       const record = {
         id: '1',
+        sessionId: null,
         filename: 'test.txt',
         mimeType: 'text/plain',
+        userId: 'user-1',
+        minioKey: 'key1',
+        qdrantId: null,
         createdAt: new Date(),
       };
       filesService.upload.mockResolvedValue(record as any);
@@ -79,8 +87,12 @@ describe('FilesController', () => {
       const files = [
         {
           id: '1',
+          sessionId: null,
           filename: 'test.txt',
           mimeType: 'text/plain',
+          userId: 'user-1',
+          minioKey: 'key1',
+          qdrantId: null,
           createdAt: new Date(),
         },
       ];
@@ -98,6 +110,7 @@ describe('FilesController', () => {
       const stream = Readable.from(['hello']);
       const record = {
         id: '1',
+        sessionId: null,
         filename: 'test.txt',
         mimeType: 'text/plain',
         minioKey: 'k',
