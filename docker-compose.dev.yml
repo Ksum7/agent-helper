@@ -2,14 +2,13 @@ services:
   vllm-llm:
     image: vllm/vllm-openai:latest
     environment:
-      - VLLM_ATTENTION_BACKEND=xformers
+      - HF_TOKEN=${HF_TOKEN}
     volumes:
       - vllm_llm_cache:/root/.cache/huggingface
     ports:
       - '8000:8000'
     command: >
-      --model Qwen/Qwen3-14B
-      --quantization awq
+      --model Qwen/Qwen3-14B-AWQ
       --max-model-len 4096
       --dtype auto
       --gpu-memory-utilization 0.75
@@ -23,6 +22,8 @@ services:
 
   vllm-embed:
     image: vllm/vllm-openai:latest
+    environment:
+      - HF_TOKEN=${HF_TOKEN} 
     volumes:
       - vllm_embed_cache:/root/.cache/huggingface
     command: >
@@ -38,6 +39,8 @@ services:
 
   vllm-rerank:
     image: vllm/vllm-openai:latest
+    environment:
+      - HF_TOKEN=${HF_TOKEN} 
     volumes:
       - vllm_rerank_cache:/root/.cache/huggingface
     command: >
