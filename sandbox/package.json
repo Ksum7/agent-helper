@@ -1,0 +1,12 @@
+{
+  "name": "sandbox",
+  "version": "1.0.0",
+  "description": "Secure JavaScript execution sandbox",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

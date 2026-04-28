@@ -11,7 +11,6 @@ services:
       --model Qwen/Qwen3-14B-AWQ
       --max-model-len 4096
       --dtype auto
-      --gpu-memory-utilization 0.75
     deploy:
       resources:
         reservations:
@@ -91,6 +90,23 @@ services:
       - '9001:9001'
     volumes:
       - minio_data:/data
+
+  sandbox:
+    build: ./sandbox
+    ports:
+      - '3001:3001'
+    mem_limit: 128m
+    cpus: '0.5'
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:3001/execute || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   vllm_llm_cache:
