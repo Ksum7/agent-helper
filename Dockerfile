@@ -17,9 +17,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
-COPY ecosystem.config.js ./
 
 RUN mkdir -p logs
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
