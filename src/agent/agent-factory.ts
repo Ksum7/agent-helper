@@ -17,12 +17,13 @@ export function createChatAgent({
 }: ChatAgentConfig) {
   const model = new ChatOpenAI({
     model: llmModel,
-    openAIApiKey: 'not-needed', // vLLM doesn't require a real API key
+    apiKey: process.env.OPENAI_API_KEY || 'sk-not-needed',
     configuration: {
       baseURL: llmUrl,
     },
-    temperature: 0.7,
-    maxTokens: 4096,
+    temperature: 0.3,
+    maxTokens: 2048,
+    streaming: true,
   });
 
   return createAgent({

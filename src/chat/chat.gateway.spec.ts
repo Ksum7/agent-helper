@@ -98,16 +98,16 @@ describe('ChatGateway', () => {
       socket.data.user = { sub: 'user-1' };
 
       async function* mockStream() {
-        yield 'Hello ';
-        yield 'world';
+        yield { type: 'text' as const, content: 'Hello ' };
+        yield { type: 'text' as const, content: 'world' };
       }
       chatService.stream.mockReturnValue(mockStream());
 
       await gateway.handleMessage(socket, { sessionId: 'session-1', content: 'hi' });
 
       expect(chatService.stream).toHaveBeenCalledWith('user-1', 'session-1', 'hi');
-      expect(socket.emit).toHaveBeenCalledWith('chunk', 'Hello ');
-      expect(socket.emit).toHaveBeenCalledWith('chunk', 'world');
+      expect(socket.emit).toHaveBeenCalledWith('chunk', { type: 'text', content: 'Hello ' });
+      expect(socket.emit).toHaveBeenCalledWith('chunk', { type: 'text', content: 'world' });
       expect(socket.emit).toHaveBeenCalledWith('done');
     });
 
@@ -116,9 +116,9 @@ describe('ChatGateway', () => {
       socket.data.user = { sub: 'user-1' };
 
       async function* mockStream() {
-        yield '1';
-        yield '2';
-        yield '3';
+        yield { type: 'text' as const, content: '1' };
+        yield { type: 'text' as const, content: '2' };
+        yield { type: 'text' as const, content: '3' };
       }
       chatService.stream.mockReturnValue(mockStream());
 

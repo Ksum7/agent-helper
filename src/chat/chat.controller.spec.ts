@@ -142,8 +142,8 @@ describe('ChatController', () => {
       prisma.chatSession.findFirst.mockResolvedValue({ id: 'session-1', userId: 'user-1' } as any);
 
       async function* mockStream() {
-        yield 'Hello ';
-        yield 'world';
+        yield { type: 'text' as const, content: 'Hello ' };
+        yield { type: 'text' as const, content: 'world' };
       }
       chatService.stream.mockReturnValue(mockStream());
 
@@ -155,8 +155,8 @@ describe('ChatController', () => {
       expect(res.setHeader).toHaveBeenCalledWith('Connection', 'keep-alive');
       expect(res.flushHeaders).toHaveBeenCalled();
 
-      expect(res.write).toHaveBeenCalledWith('data: {"chunk":"Hello "}\n\n');
-      expect(res.write).toHaveBeenCalledWith('data: {"chunk":"world"}\n\n');
+      expect(res.write).toHaveBeenCalledWith('data: {"type":"text","content":"Hello "}\n\n');
+      expect(res.write).toHaveBeenCalledWith('data: {"type":"text","content":"world"}\n\n');
       expect(res.write).toHaveBeenCalledWith('data: [DONE]\n\n');
       expect(res.end).toHaveBeenCalled();
     });
@@ -180,7 +180,7 @@ describe('ChatController', () => {
       const res = mockRes();
       await controller.sendMessage('session-1', { content: 'hi' }, mockUser, res);
 
-      expect(res.write).toHaveBeenCalledWith('data: {"error":"Stream error"}\n\n');
+      expect(res.write).toHaveBeenCalledWith('data: {"type":"error","content":"Stream failed"}\n\n');
       expect(res.end).toHaveBeenCalled();
     });
   });

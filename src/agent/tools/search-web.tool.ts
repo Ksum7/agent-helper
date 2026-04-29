@@ -28,7 +28,7 @@ export const searchWebTool = (
     },
     {
       name: 'searchWeb',
-      description: 'Search the web for up-to-date information',
+      description: 'Search the web for current information about news, events, prices, availability, or any time-sensitive data. Use this for anything that requires up-to-date information beyond your training data.',
       schema: z.object({ query: z.string().describe('Search query') }),
     },
   );

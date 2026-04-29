@@ -70,17 +70,21 @@ describe('ChatService', () => {
       ]);
 
       async function* mockStream() {
-        yield 'chunk1';
-        yield 'chunk2';
+        yield { type: 'text' as const, content: 'chunk1' };
+        yield { type: 'text' as const, content: 'chunk2' };
+        yield { type: 'message' as const, content: 'chunk1chunk2' };
       }
       agentService.stream.mockReturnValue(mockStream());
 
-      const chunks: string[] = [];
+      const chunks: any[] = [];
       for await (const chunk of service.stream(userId, sessionId, content)) {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual(['chunk1', 'chunk2']);
+      expect(chunks).toEqual([
+        { type: 'text', content: 'chunk1' },
+        { type: 'text', content: 'chunk2' },
+      ]);
       expect(prisma.message.create).toHaveBeenCalledTimes(2);
       expect(prisma.message.create).toHaveBeenNthCalledWith(1, {
         data: { userId, sessionId, role: 'user', content },
@@ -113,13 +117,13 @@ describe('ChatService', () => {
       }
       agentService.stream.mockReturnValue(emptyStream());
 
-      const chunks: string[] = [];
+      const chunks: any[] = [];
       for await (const chunk of service.stream(userId, sessionId, content)) {
         chunks.push(chunk);
       }
 
       expect(chunks).toEqual([]);
-      expect(prisma.message.create).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledTimes(1);
     });
   });
 });
