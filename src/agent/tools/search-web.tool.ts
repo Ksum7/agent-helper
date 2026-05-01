@@ -18,7 +18,7 @@ export const searchWebTool = (
           organic: Array<{ title: string; snippet: string; link: string }>;
         }>('https://google.serper.dev/search', {
           headers: { 'X-API-KEY': apiKey },
-          params: { q: query, num: 5 },
+          params: { q: query, tbs: 'cw:1', num: 5 },
         }),
       );
 
@@ -28,7 +28,8 @@ export const searchWebTool = (
     },
     {
       name: 'searchWeb',
-      description: 'Search the web for current information about news, events, prices, availability, or any time-sensitive data. Use this for anything that requires up-to-date information beyond your training data.',
+      description:
+        'Search the web for current information about news, events, prices, availability, or any time-sensitive data. Use this for anything that requires up-to-date information beyond your training data.',
       schema: z.object({ query: z.string().describe('Search query') }),
     },
   );
