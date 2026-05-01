@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentService, StreamEvent } from '../agent/agent.service';
 
@@ -25,6 +26,7 @@ export class ChatService {
     });
 
     let reply = '';
+    const events: StreamEvent[] = [];
     for await (const event of this.agentService.stream(
       userId,
       sessionId,
@@ -35,12 +37,13 @@ export class ChatService {
         reply = event.content;
         continue;
       }
+      events.push(event);
       yield event;
     }
 
     if (reply) {
       await this.prisma.message.create({
-        data: { userId, sessionId, role: 'assistant', content: reply },
+        data: { userId, sessionId, role: 'assistant', content: reply, events: events as unknown as Prisma.InputJsonValue },
       });
     }
   }

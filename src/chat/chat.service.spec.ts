@@ -89,6 +89,18 @@ describe('ChatService', () => {
       expect(prisma.message.create).toHaveBeenNthCalledWith(1, {
         data: { userId, sessionId, role: 'user', content },
       });
+      expect(prisma.message.create).toHaveBeenNthCalledWith(2, {
+        data: {
+          userId,
+          sessionId,
+          role: 'assistant',
+          content: 'chunk1chunk2',
+          events: [
+            { type: 'text', content: 'chunk1' },
+            { type: 'text', content: 'chunk2' },
+          ],
+        },
+      });
 
       expect(prisma.message.findMany).toHaveBeenCalledWith({
         where: { userId, sessionId },

@@ -32,6 +32,7 @@ model Message {
   id        String   @id @default(cuid())
   role      String
   content   String
+  events    Json?
   sessionId String
   createdAt DateTime @default(now())
 
