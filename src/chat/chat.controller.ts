@@ -8,6 +8,7 @@ import {
   Logger,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Res,
   UseGuards,
@@ -19,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ChatService } from './chat.service';
 import { CreateSessionDto } from './dtos/create-session.dto';
 import { SendMessageDto } from './dtos/send-message.dto';
+import { UpdateSessionDto } from './dtos/update-session.dto';
 
 @Controller('chat')
 @UseGuards(AuthGuard)
@@ -52,6 +54,22 @@ export class ChatController {
     });
     if (!session) throw new NotFoundException();
     return session;
+  }
+
+  @Patch('sessions/:id')
+  async updateSession(
+    @Param('id') id: string,
+    @User() user: { sub: string },
+    @Body() dto: UpdateSessionDto,
+  ) {
+    const session = await this.prisma.chatSession.findFirst({
+      where: { id, userId: user.sub },
+    });
+    if (!session) throw new NotFoundException();
+    return this.prisma.chatSession.update({
+      where: { id },
+      data: { title: dto.title },
+    });
   }
 
   @Delete('sessions/:id')
