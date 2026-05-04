@@ -11,7 +11,8 @@ export type StreamEvent =
   | { type: 'text'; content: string }
   | { type: 'tool_call'; name: string; args?: unknown; id?: string }
   | { type: 'tool_result'; name: string; content: string }
-  | { type: 'message'; content: string };
+  | { type: 'message'; content: string }
+  | { type: 'warning'; content: string };
 
 const THINK_OPEN = '<think>';
 const THINK_CLOSE = '</think>';
@@ -41,6 +42,9 @@ export class AgentService {
     let fullText = '';
     let inThinking = false;
     let buffer = '';
+    let finishReason = 'stop';
+
+    const logContext = { userId, sessionId, historySize: history.length };
 
     const flushPending = function* (): Generator<StreamEvent> {
       if (!buffer) return;
@@ -53,115 +57,141 @@ export class AgentService {
       buffer = '';
     };
 
-    for await (const chunk of stream) {
-      if (!Array.isArray(chunk) || chunk.length < 2) continue;
-      const [mode, data] = chunk;
-
-      if (mode === 'tools') {
-        const ev: any = data;
-        if (!ev || typeof ev !== 'object') continue;
-        if (ev.event === 'on_tool_start') {
-          yield* flushPending();
-          yield {
-            type: 'tool_call',
-            name: ev.name || 'unknown',
-            args: ev.input ?? {},
-            id: ev.run_id,
-          };
-        } else if (ev.event === 'on_tool_end') {
-          const output = ev.output;
-          const outContent =
-            typeof output === 'string'
-              ? output
-              : output != null
-                ? JSON.stringify(output)
-                : '';
-          yield {
-            type: 'tool_result',
-            name: ev.name || 'unknown',
-            content: outContent,
-          };
-        } else if (ev.event === 'on_tool_error') {
-          const errMsg =
-            ev.error instanceof Error
-              ? ev.error.message
-              : typeof ev.error === 'string'
-                ? ev.error
-                : JSON.stringify(ev.error);
-          yield {
-            type: 'tool_result',
-            name: ev.name || 'unknown',
-            content: `Error: ${errMsg}`,
-          };
+    try {
+      for await (const chunk of stream) {
+        if (chunk?.['finish_reason']) {
+          finishReason = chunk['finish_reason'];
+          if (finishReason === 'length') {
+            console.warn('[TOKEN LIMIT] Response cut at token limit', logContext);
+          }
         }
-        continue;
-      }
 
-      if (mode !== 'messages') continue;
-      if (!Array.isArray(data) || data.length < 1) continue;
+        if (!Array.isArray(chunk) || chunk.length < 2) continue;
+        const [mode, data] = chunk;
 
-      const messageChunk: any = data[0];
-      if (!messageChunk) continue;
+        if (mode === 'tools') {
+          const ev: any = data;
+          if (!ev || typeof ev !== 'object') continue;
+          if (ev.event === 'on_tool_start') {
+            yield* flushPending();
+            yield {
+              type: 'tool_call',
+              name: ev.name || 'unknown',
+              args: ev.input ?? {},
+              id: ev.run_id,
+            };
+          } else if (ev.event === 'on_tool_end') {
+            const output = ev.output;
+            const outContent =
+              typeof output === 'string'
+                ? output
+                : output != null
+                  ? JSON.stringify(output)
+                  : '';
+            yield {
+              type: 'tool_result',
+              name: ev.name || 'unknown',
+              content: outContent,
+            };
+          } else if (ev.event === 'on_tool_error') {
+            const errMsg =
+              ev.error instanceof Error
+                ? ev.error.message
+                : typeof ev.error === 'string'
+                  ? ev.error
+                  : JSON.stringify(ev.error);
+            yield {
+              type: 'tool_result',
+              name: ev.name || 'unknown',
+              content: `Error: ${errMsg}`,
+            };
+          }
+          continue;
+        }
 
-      const msgType = this.getMessageType(messageChunk);
+        if (mode !== 'messages') continue;
+        if (!Array.isArray(data) || data.length < 1) continue;
 
-      // Tool messages and AI tool_calls are handled via 'tools' mode now.
-      if (msgType === 'tool') continue;
+        const messageChunk: any = data[0];
+        if (!messageChunk) continue;
 
-      const rawContent = messageChunk.content;
-      const content =
-        typeof rawContent === 'string'
-          ? rawContent
-          : rawContent
-            ? JSON.stringify(rawContent)
-            : '';
-      if (!content) continue;
+        const msgType = this.getMessageType(messageChunk);
 
-      buffer += content;
+        if (msgType === 'tool') continue;
 
-      while (true) {
-        if (inThinking) {
-          const endIdx = buffer.indexOf(THINK_CLOSE);
-          if (endIdx === -1) {
-            const safeLen = Math.max(0, buffer.length - THINK_CLOSE.length);
-            if (safeLen > 0) {
-              yield { type: 'thinking', content: buffer.slice(0, safeLen) };
-              buffer = buffer.slice(safeLen);
+        const rawContent = messageChunk.content;
+        const content =
+          typeof rawContent === 'string'
+            ? rawContent
+            : rawContent
+              ? JSON.stringify(rawContent)
+              : '';
+        if (!content) continue;
+
+        buffer += content;
+
+        while (true) {
+          if (inThinking) {
+            const endIdx = buffer.indexOf(THINK_CLOSE);
+            if (endIdx === -1) {
+              const safeLen = Math.max(0, buffer.length - THINK_CLOSE.length);
+              if (safeLen > 0) {
+                yield { type: 'thinking', content: buffer.slice(0, safeLen) };
+                buffer = buffer.slice(safeLen);
+              }
+              break;
             }
-            break;
-          }
-          if (endIdx > 0) {
-            yield { type: 'thinking', content: buffer.slice(0, endIdx) };
-          }
-          buffer = buffer.slice(endIdx + THINK_CLOSE.length);
-          inThinking = false;
-        } else {
-          const startIdx = buffer.indexOf(THINK_OPEN);
-          if (startIdx === -1) {
-            const safeLen = Math.max(0, buffer.length - THINK_OPEN.length);
-            if (safeLen > 0) {
-              const textPart = buffer.slice(0, safeLen);
+            if (endIdx > 0) {
+              yield { type: 'thinking', content: buffer.slice(0, endIdx) };
+            }
+            buffer = buffer.slice(endIdx + THINK_CLOSE.length);
+            inThinking = false;
+          } else {
+            const startIdx = buffer.indexOf(THINK_OPEN);
+            if (startIdx === -1) {
+              const safeLen = Math.max(0, buffer.length - THINK_OPEN.length);
+              if (safeLen > 0) {
+                const textPart = buffer.slice(0, safeLen);
+                yield { type: 'text', content: textPart };
+                fullText += textPart;
+                buffer = buffer.slice(safeLen);
+              }
+              break;
+            }
+            if (startIdx > 0) {
+              const textPart = buffer.slice(0, startIdx);
               yield { type: 'text', content: textPart };
               fullText += textPart;
-              buffer = buffer.slice(safeLen);
             }
-            break;
+            buffer = buffer.slice(startIdx + THINK_OPEN.length);
+            inThinking = true;
           }
-          if (startIdx > 0) {
-            const textPart = buffer.slice(0, startIdx);
-            yield { type: 'text', content: textPart };
-            fullText += textPart;
-          }
-          buffer = buffer.slice(startIdx + THINK_OPEN.length);
-          inThinking = true;
         }
       }
-    }
 
-    yield* flushPending();
+      yield* flushPending();
 
-    if (fullText) {
-      yield { type: 'message', content: fullText };
+      if (fullText) {
+        yield { type: 'message', content: fullText };
+      }
+
+      if (finishReason === 'length') {
+        console.warn('[TRUNCATION WARNING] Response cut at token limit', {
+          ...logContext,
+          responseLength: fullText.length,
+        });
+        yield {
+          type: 'warning',
+          content:
+            '⚠️ Ответ был сокращен из-за лимита токенов. Попробуйте задать более конкретный вопрос или загрузить файл.',
+        };
+      }
+    } catch (error) {
+      console.error('[AGENT STREAM ERROR]', {
+        ...logContext,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   }
 

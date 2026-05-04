@@ -66,14 +66,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
   ) {
     const userId = client.data.user?.sub as string;
 
-    for await (const chunk of this.chatService.stream(
-      userId,
-      data.sessionId,
-      data.content,
-    )) {
-      client.emit('chunk', chunk);
-    }
+    try {
+      for await (const chunk of this.chatService.stream(
+        userId,
+        data.sessionId,
+        data.content,
+      )) {
+        client.emit('chunk', chunk);
+      }
 
-    client.emit('done');
+      client.emit('done');
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : 'Unknown error';
+      client.emit('error', {
+        message: 'Failed to process message',
+        details: errorMsg,
+      });
+    }
   }
 }

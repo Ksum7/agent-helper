@@ -22,7 +22,7 @@ export function createChatAgent({
       baseURL: llmUrl,
     },
     temperature: 0.3,
-    maxTokens: 2048,
+    maxTokens: 3000,
     streaming: true,
   });
 
