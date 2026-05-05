@@ -15,13 +15,14 @@ export class FilesService {
   ) {}
 
   async upload(userId: string, file: Express.Multer.File, sessionId?: string) {
-    const key = `${userId}/${randomUUID()}-${file.originalname}`;
+    const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    const key = `${userId}/${randomUUID()}-${originalname}`;
     await this.minio.upload(key, file.buffer, file.mimetype);
 
     const record = await this.prisma.fileRecord.create({
       data: {
         userId,
-        filename: file.originalname,
+        filename: originalname,
         mimeType: file.mimetype,
         minioKey: key,
         qdrantId: null,
@@ -32,7 +33,7 @@ export class FilesService {
     let qdrantId: string | undefined;
     if (this.textExtractor.isSupported(file.mimetype)) {
       const text = await this.textExtractor.extract(file);
-      qdrantId = await this.qdrant.upsert(userId, record.id, text, sessionId);
+      qdrantId = await this.qdrant.upsert(userId, record.id, originalname, text, sessionId);
       await this.prisma.fileRecord.update({
         where: { id: record.id },
         data: { qdrantId },

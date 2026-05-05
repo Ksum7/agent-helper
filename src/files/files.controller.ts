@@ -44,9 +44,10 @@ export class FilesController {
   ) {
     const { record, stream } = await this.filesService.getStream(user.sub, id);
     res.setHeader('Content-Type', record.mimeType);
+    const encoded = encodeURIComponent(record.filename).replace(/'/g, '%27');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${record.filename}"`,
+      `attachment; filename*=UTF-8''${encoded}`,
     );
     stream.pipe(res);
   }

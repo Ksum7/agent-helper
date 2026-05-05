@@ -23,14 +23,16 @@ export const memoryTools = (userId: string, memoryService: MemoryService) => [
     async ({ query }: { query: string }) => {
       const results = await memoryService.recall(userId, query);
       if (!results.length) return 'No memories found for that query.';
-      return results.map((m) => `${m.key}: ${m.value}`).join('\n');
+      return results
+        .map((m) => `[${(m.score * 100).toFixed(0)}%] ${m.key}: ${m.value}`)
+        .join('\n');
     },
     {
       name: 'recall_info',
       description:
-        'Search long-term memory for previously saved information. Use when you need context the user may have asked you to remember.',
+        'Search long-term memory for previously saved information using semantic search with reranking. Use when you need context the user may have asked you to remember.',
       schema: z.object({
-        query: z.string().describe('Search term to look up in memory'),
+        query: z.string().describe('Search term or question to look up in memory'),
       }),
     },
   ),

@@ -4,6 +4,7 @@ import { HttpService } from '@nestjs/axios';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
+import { chunkText } from './text-chunker';
 
 const COLLECTION = 'user_files';
 const VECTOR_SIZE = 384;
@@ -29,21 +30,24 @@ export class QdrantService implements OnModuleInit {
     }
   }
 
-  async upsert(userId: string, fileId: string, text: string, sessionId?: string): Promise<string> {
-    const vector = await this.embed(text);
-    const pointId = randomUUID();
+  async upsert(
+    userId: string,
+    fileId: string,
+    filename: string,
+    text: string,
+    sessionId?: string,
+  ): Promise<string> {
+    const chunks = chunkText(text, 350);
+    const points = await Promise.all(
+      chunks.map(async (chunk) => ({
+        id: randomUUID(),
+        vector: await this.embed(chunk),
+        payload: { userId, fileId, filename, sessionId, text: chunk.slice(0, 500) },
+      })),
+    );
 
-    await this.client.upsert(COLLECTION, {
-      points: [
-        {
-          id: pointId,
-          vector,
-          payload: { userId, fileId, sessionId, text: text.slice(0, 500) },
-        },
-      ],
-    });
-
-    return pointId;
+    await this.client.upsert(COLLECTION, { points });
+    return points[0].id;
   }
 
   async search(userId: string, query: string, limit = 5) {
@@ -69,7 +73,7 @@ export class QdrantService implements OnModuleInit {
     const { data } = await firstValueFrom(
       this.httpService.post<{ data: { embedding: number[] }[] }>(
         `${embedUrl}/embeddings`,
-        { model, input: text },
+        { model, input: text, truncate_prompt_tokens: 512 },
       ),
     );
 

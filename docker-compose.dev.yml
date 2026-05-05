@@ -9,10 +9,13 @@ services:
       - '8000:8000'
     command: >
       --model Qwen/Qwen3-14B-AWQ
-      --max-model-len 7000
+      --max-model-len 16000
       --dtype auto
       --enable-auto-tool-choice
       --tool-call-parser hermes
+      --cpu-offload-gb 4
+      --swap-space 8
+      --gpu-memory-utilization 0.95
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
       interval: 10s

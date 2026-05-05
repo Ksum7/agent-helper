@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { Message } from '@prisma/client';
 import { MemoryService } from '../memory/memory.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { createChatAgent } from './agent-factory';
 import { buildTools } from './tools';
 
@@ -23,6 +24,7 @@ export class AgentService {
     private readonly config: ConfigService,
     private readonly httpService: HttpService,
     private readonly memoryService: MemoryService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async *stream(
@@ -222,6 +224,7 @@ export class AgentService {
       this.httpService,
       this.config,
       this.memoryService,
+      this.prisma,
     );
 
     const systemPrompt = `You are a helpful AI assistant. Today's date is ${new Date().toISOString().split('T')[0]}.

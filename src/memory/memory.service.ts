@@ -1,23 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { MemoryRepository } from './memory.repository';
+import { VectorMemoryService, MemoryResult } from './vector-memory.service';
 
 @Injectable()
 export class MemoryService {
-  constructor(private readonly repo: MemoryRepository) {}
+  constructor(private readonly vectorMemory: VectorMemoryService) {}
 
   remember(userId: string, key: string, value: string) {
-    return this.repo.set(userId, key, value);
+    return this.vectorMemory.remember(userId, key, value);
   }
 
-  recall(userId: string, query: string) {
-    return this.repo.search(userId, query);
+  recall(userId: string, query: string): Promise<MemoryResult[]> {
+    return this.vectorMemory.recall(userId, query);
   }
 
   list(userId: string) {
-    return this.repo.list(userId);
+    return this.vectorMemory.list(userId);
   }
 
   forget(userId: string, key: string) {
-    return this.repo.delete(userId, key);
+    return this.vectorMemory.forget(userId, key);
   }
 }

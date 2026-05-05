@@ -21,7 +21,7 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 - `chat` — WebSocket + async streaming
 - `agent` — LangChain `createChatAgent` с встроенными инструментами
 - `files` — Управление файлами: MinIO (хранилище) + PostgreSQL (метаданные) + Qdrant (embeddings); `TextExtractorService` для извлечения текста из файлов
-- `memory` — PostgreSQL (upsert/search)
+- `memory` — Векторная память: PostgreSQL (метаданные) + Qdrant (embeddings) + Реранкирование
 
 ## Агент (src/agent/)
 
@@ -84,9 +84,33 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 - Рассказывать какие файлы доступны (из списка)
 - Удалять файлы (если явно запросил пользователь)
 
+## Memory API (src/memory/)
+
+**Структура:**
+- `vector-memory.service.ts` — Хранилище векторной памяти с комбинированным поиском + реранкингом
+- `memory.service.ts` — Фасад для агента
+- `memory.tool.ts` — Инструменты агента: `remember_info`, `recall_info`, `forget_info`
+
+**Алгоритм поиска памяти:**
+1. **Параллельный поиск** — одновременно ищется через:
+   - Векторный поиск в Qdrant (семантический поиск по embeddings)
+   - BM25 текстовый поиск в PostgreSQL (точное совпадение ключей/значений)
+2. **Комбинирование результатов** — объединяются оба результата (вес вектор: 0.6, вес BM25: 0.4)
+3. **Реранкирование** — результаты переранжируются через vLLM реранкер (`BAAI/bge-reranker-v2-m3`)
+4. **Возврат топ-N** — возвращаются топ-5 результатов с scores
+
+**Встроенные инструменты агента:**
+- `remember_info(key, value)` — сохранить память (создаёт embeddings + сохраняет в BД)
+- `recall_info(query)` — поиск памяти (комбинированный поиск + реранк, возвращает [score%, key: value])
+- `forget_info(key)` — удалить память из Qdrant и PostgreSQL
+
+**Данные:**
+- PostgreSQL: `Memory` модель (userId, key, value, createdAt)
+- Qdrant: коллекция `user_memories` (embeddings, payloads с userId/key/value)
+
 ## Testing
 
-**Тесты:** 63 unit тестов (все ✅ passing)
+**Тесты:** 68 unit тестов (все ✅ passing)
 - `npm test` — запустить все тесты
 - `npm test -- --watch` — watch mode
 - `npm run test:cov` — coverage report
@@ -95,7 +119,7 @@ Backend: NestJS + LangChain. Frontend по контексту (в планах).
 - `auth`: service (register/login/me), guard (JWT validation, cookie extraction)
 - `chat`: controller (session CRUD, SSE), service (async streaming), gateway (WebSocket)
 - `files`: service (upload/list/delete with Qdrant), controller (sessionId), text-extractor (MIME validation)
-- `memory`: service (delegation), repository (Prisma CRUD)
+- `memory`: service (delegation), vector-memory (комбинированный поиск + реранк + embedding)
 
 **Test patterns:**
 - `Test.createTestingModule` + `useValue` mocks

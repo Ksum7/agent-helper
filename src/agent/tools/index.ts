@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { StructuredTool } from '@langchain/core/tools';
 import { MemoryService } from '../../memory/memory.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { searchWebTool } from './search-web.tool';
 import { browseUrlTool } from './browse-url.tool';
 import { searchUserFilesTool } from './search-user-files.tool';
@@ -14,9 +15,10 @@ export function buildTools(
   httpService: HttpService,
   config: ConfigService,
   memoryService: MemoryService,
+  prisma: PrismaService,
 ): StructuredTool[] {
   return [
-    searchUserFilesTool(userId, sessionId, config, httpService),
+    searchUserFilesTool(userId, sessionId, config, httpService, prisma),
     searchWebTool(httpService, config),
     browseUrlTool(httpService),
     executeCodeTool(httpService, config),

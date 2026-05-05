@@ -1,76 +1,75 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MemoryService } from './memory.service';
-import { MemoryRepository } from './memory.repository';
+import { VectorMemoryService } from './vector-memory.service';
 
 describe('MemoryService', () => {
   let service: MemoryService;
-  let repo: jest.Mocked<MemoryRepository>;
+  let vectorMemory: jest.Mocked<VectorMemoryService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MemoryService,
         {
-          provide: MemoryRepository,
+          provide: VectorMemoryService,
           useValue: {
-            set: jest.fn(),
-            search: jest.fn(),
+            remember: jest.fn(),
+            recall: jest.fn(),
             list: jest.fn(),
-            delete: jest.fn(),
+            forget: jest.fn(),
           },
         },
       ],
     }).compile();
 
     service = module.get(MemoryService);
-    repo = module.get(MemoryRepository);
+    vectorMemory = module.get(VectorMemoryService) as jest.Mocked<VectorMemoryService>;
   });
 
   describe('remember', () => {
-    it('delegates to repo.set', async () => {
-      repo.set.mockResolvedValue({ id: '1', userId: 'user-1', key: 'name', value: 'John' } as any);
+    it('delegates to vectorMemory.remember', async () => {
+      vectorMemory.remember.mockResolvedValue(undefined);
 
-      const result = await service.remember('user-1', 'name', 'John');
+      await service.remember('user-1', 'name', 'John');
 
-      expect(repo.set).toHaveBeenCalledWith('user-1', 'name', 'John');
-      expect(result).toEqual({ id: '1', userId: 'user-1', key: 'name', value: 'John' });
+      expect(vectorMemory.remember).toHaveBeenCalledWith('user-1', 'name', 'John');
     });
   });
 
   describe('recall', () => {
-    it('delegates to repo.search', async () => {
-      const results = [{ id: '1', key: 'name', value: 'John' }];
-      repo.search.mockResolvedValue(results as any);
+    it('delegates to vectorMemory.recall', async () => {
+      const results = [{ id: '1', key: 'name', value: 'John', score: 0.95 }];
+      vectorMemory.recall.mockResolvedValue(results as any);
 
       const result = await service.recall('user-1', 'john');
 
-      expect(repo.search).toHaveBeenCalledWith('user-1', 'john');
+      expect(vectorMemory.recall).toHaveBeenCalledWith('user-1', 'john');
       expect(result).toEqual(results);
     });
   });
 
   describe('list', () => {
-    it('delegates to repo.list', async () => {
+    it('delegates to vectorMemory.list', async () => {
       const items = [
         { id: '1', key: 'name', value: 'John' },
         { id: '2', key: 'age', value: '30' },
       ];
-      repo.list.mockResolvedValue(items as any);
+      vectorMemory.list.mockResolvedValue(items as any);
 
       const result = await service.list('user-1');
 
-      expect(repo.list).toHaveBeenCalledWith('user-1');
+      expect(vectorMemory.list).toHaveBeenCalledWith('user-1');
       expect(result).toEqual(items);
     });
   });
 
   describe('forget', () => {
-    it('delegates to repo.delete', async () => {
-      repo.delete.mockResolvedValue({} as any);
+    it('delegates to vectorMemory.forget', async () => {
+      vectorMemory.forget.mockResolvedValue(undefined);
 
       await service.forget('user-1', 'name');
 
-      expect(repo.delete).toHaveBeenCalledWith('user-1', 'name');
+      expect(vectorMemory.forget).toHaveBeenCalledWith('user-1', 'name');
     });
   });
 });
