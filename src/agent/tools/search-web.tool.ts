@@ -18,7 +18,7 @@ export const searchWebTool = (
           organic: Array<{ title: string; snippet: string; link: string }>;
         }>('https://google.serper.dev/search', {
           headers: { 'X-API-KEY': apiKey },
-          params: { q: query, tbs: 'cw:1', num: 5 },
+          params: { q: query, num: 5, tbs: 'qdr:m' },
         }),
       );
 

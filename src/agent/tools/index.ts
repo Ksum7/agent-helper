@@ -8,6 +8,7 @@ import { browseUrlTool } from './browse-url.tool';
 import { searchUserFilesTool } from './search-user-files.tool';
 import { memoryTools } from './memory.tool';
 import { executeCodeTool } from './execute-code.tool';
+import { getCurrentTimeTool } from './get-current-time.tool';
 
 export function buildTools(
   userId: string,
@@ -22,6 +23,7 @@ export function buildTools(
     searchWebTool(httpService, config),
     browseUrlTool(httpService),
     executeCodeTool(httpService, config),
+    getCurrentTimeTool(),
     ...memoryTools(userId, memoryService),
   ];
 }
