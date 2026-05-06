@@ -1,24 +1,38 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+
+// Matches the MemoryType enum in prisma/schema.prisma.
+// Once `prisma migrate dev` runs, import from '@prisma/client' instead.
+export enum MemoryType {
+  FACT = 'FACT',
+  PREFERENCE = 'PREFERENCE',
+  TASK = 'TASK',
+  EPISODE = 'EPISODE',
+  NOTE = 'NOTE',
+}
 import { chunkText } from '../files/text-chunker';
+import { buildSparseVector } from '../files/sparse-encoder';
 
 const COLLECTION = 'user_memories';
-const VECTOR_SIZE = 384;
+const DENSE_SIZE = 384;
+const CANDIDATE_MULTIPLIER = 3;
 
 export interface MemoryResult {
   id: string;
   key: string;
   value: string;
+  type: MemoryType;
   score: number;
 }
 
 @Injectable()
 export class VectorMemoryService implements OnModuleInit {
+  private readonly logger = new Logger(VectorMemoryService.name);
   private client: QdrantClient;
 
   constructor(
@@ -30,59 +44,90 @@ export class VectorMemoryService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    const collections = await this.client.getCollections();
-    const exists = collections.collections.some((c) => c.name === COLLECTION);
-    if (!exists) {
-      await this.client.createCollection(COLLECTION, {
-        vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
-      });
-    }
+    await this.ensureCollection();
   }
 
-  async remember(userId: string, key: string, value: string): Promise<void> {
-    const chunks = chunkText(value, 350);
+  async remember(userId: string, key: string, value: string, type: MemoryType = MemoryType.FACT): Promise<void> {
+    const chunks = chunkText(value, 300, 48);
     const points = await Promise.all(
-      chunks.map(async (chunk) => ({
-        id: randomUUID(),
-        vector: await this.embed(chunk),
-        payload: {
-          userId,
-          key,
-          value: chunk.slice(0, 1000),
-        },
-      })),
+      chunks.map(async (chunk) => {
+        const [dense, sparse] = await Promise.all([
+          this.embed(chunk),
+          Promise.resolve(buildSparseVector(chunk)),
+        ]);
+        return {
+          id: randomUUID(),
+          vector: { dense, sparse },
+          payload: {
+            userId,
+            key,
+            value: chunk.slice(0, 1000),
+            type,
+          },
+        };
+      }),
     );
 
     await Promise.all([
       this.client.upsert(COLLECTION, { points }),
       this.prisma.memory.upsert({
         where: { userId_key: { userId, key } },
-        create: { userId, key, value },
-        update: { value },
+        create: { userId, key, value, type },
+        update: { value, type },
       }),
     ]);
   }
 
   async recall(userId: string, query: string, limit = 5): Promise<MemoryResult[]> {
-    const [vectorResults, bm25Results] = await Promise.all([
-      this.vectorSearch(userId, query, limit * 2),
-      this.bm25Search(userId, query, limit * 2),
+    const [dense, sparse] = await Promise.all([
+      this.embed(query),
+      Promise.resolve(buildSparseVector(query)),
     ]);
 
-    const combined = this.combineResults(vectorResults, bm25Results);
-    const reranked = await this.rerank(query, combined, limit);
+    const userFilter = {
+      must: [{ key: 'userId', match: { value: userId } }],
+    };
 
+    const candidateLimit = limit * CANDIDATE_MULTIPLIER;
+
+    const response = await this.client.query(COLLECTION, {
+      prefetch: [
+        { query: dense, using: 'dense', limit: candidateLimit, filter: userFilter },
+        { query: sparse, using: 'sparse', limit: candidateLimit, filter: userFilter },
+      ],
+      query: { fusion: 'rrf' },
+      limit: limit * 2, // fetch extra for reranking headroom
+      with_payload: true,
+    } as any);
+
+    const points: any[] = Array.isArray(response) ? response : (response as any).points ?? [];
+
+    if (points.length === 0) return [];
+
+    const candidates = points.map((p) => ({
+      id: String(p.id),
+      key: String(p.payload?.key ?? ''),
+      value: String(p.payload?.value ?? ''),
+      type: (p.payload?.type as MemoryType) ?? MemoryType.FACT,
+      rrfScore: p.score as number,
+    }));
+
+    const reranked = await this.rerank(query, candidates, limit);
     return reranked;
   }
 
   async forget(userId: string, key: string): Promise<void> {
-    await this.client.delete(COLLECTION, {
-      filter: { must: [{ key: 'userId', match: { value: userId } }, { key: 'key', match: { value: key } }] },
-    });
-
-    await this.prisma.memory.delete({
-      where: { userId_key: { userId, key } },
-    });
+    await Promise.all([
+      this.client.delete(COLLECTION, {
+        filter: {
+          must: [
+            { key: 'userId', match: { value: userId } },
+            { key: 'key', match: { value: key } },
+          ],
+        },
+      }),
+      this.prisma.memory.delete({ where: { userId_key: { userId, key } } }),
+    ]);
   }
 
   async list(userId: string) {
@@ -92,70 +137,15 @@ export class VectorMemoryService implements OnModuleInit {
     });
   }
 
-  private async vectorSearch(userId: string, query: string, limit: number) {
-    const vector = await this.embed(query);
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
 
-    const results = await this.client.search(COLLECTION, {
-      vector,
-      limit,
-      filter: { must: [{ key: 'userId', match: { value: userId } }] },
-    });
-
-    return results.map((r) => ({
-      id: String(r.id),
-      key: (r.payload?.key as string) || '',
-      value: (r.payload?.value as string) || '',
-      score: r.score,
-      source: 'vector' as const,
-    }));
-  }
-
-  private async bm25Search(userId: string, query: string, limit: number) {
-    const results = await this.prisma.memory.findMany({
-      where: {
-        userId,
-        OR: [{ key: { contains: query, mode: 'insensitive' } }, { value: { contains: query, mode: 'insensitive' } }],
-      },
-      take: limit,
-    });
-
-    return results.map((r, idx) => ({
-      id: r.id,
-      key: r.key,
-      value: r.value,
-      score: 1 - idx * 0.1,
-      source: 'bm25' as const,
-    }));
-  }
-
-  private combineResults(vectorResults: any[], bm25Results: any[]) {
-    const map = new Map<string, any>();
-
-    vectorResults.forEach((r) => {
-      if (!map.has(r.key)) {
-        map.set(r.key, { ...r, scores: { vector: r.score, bm25: 0 } });
-      } else {
-        map.get(r.key).scores.vector = r.score;
-      }
-    });
-
-    bm25Results.forEach((r) => {
-      if (!map.has(r.key)) {
-        map.set(r.key, { ...r, scores: { vector: 0, bm25: r.score } });
-      } else {
-        map.get(r.key).scores.bm25 = r.score;
-      }
-    });
-
-    return Array.from(map.values()).map((r) => ({
-      id: r.id,
-      key: r.key,
-      value: r.value,
-      combinedScore: r.scores.vector * 0.6 + r.scores.bm25 * 0.4,
-    }));
-  }
-
-  private async rerank(query: string, candidates: any[], limit: number): Promise<MemoryResult[]> {
+  private async rerank(
+    query: string,
+    candidates: { id: string; key: string; value: string; type: MemoryType; rrfScore: number }[],
+    limit: number,
+  ): Promise<MemoryResult[]> {
     if (candidates.length === 0) return [];
 
     const rerankerUrl = this.config.getOrThrow<string>('RERANK_URL');
@@ -173,23 +163,19 @@ export class VectorMemoryService implements OnModuleInit {
         ),
       );
 
-      const rerankedResults = data.data
+      return data.data
         .sort((a, b) => b.score - a.score)
         .slice(0, limit)
         .map((r) => {
-          const candidate = candidates[r.index];
-          return {
-            id: candidate.id,
-            key: candidate.key,
-            value: candidate.value,
-            score: r.score,
-          };
+          const c = candidates[r.index];
+          return { id: c.id, key: c.key, value: c.value, type: c.type, score: r.score };
         });
-
-      return rerankedResults;
-    } catch (error) {
-      console.warn('Reranker failed, falling back to combined score:', error);
-      return candidates.sort((a, b) => b.combinedScore - a.combinedScore).slice(0, limit);
+    } catch (err) {
+      this.logger.warn(`Reranker failed, using RRF scores: ${(err as Error).message}`);
+      return candidates
+        .sort((a, b) => b.rrfScore - a.rrfScore)
+        .slice(0, limit)
+        .map(({ id, key, value, type, rrfScore }) => ({ id, key, value, type, score: rrfScore }));
     }
   }
 
@@ -205,5 +191,38 @@ export class VectorMemoryService implements OnModuleInit {
     );
 
     return data.data[0].embedding;
+  }
+
+  private async ensureCollection() {
+    const collections = await this.client.getCollections();
+    const existing = collections.collections.find((c) => c.name === COLLECTION);
+
+    if (existing) {
+      const info = await this.client.getCollection(COLLECTION);
+      const hasNamedDense = !!(info.config?.params?.vectors as any)?.dense;
+      if (!hasNamedDense) {
+        this.logger.warn(
+          `Collection "${COLLECTION}" uses legacy schema — recreating for hybrid search. ` +
+          `Existing memories are cleared. The agent will rebuild memory over time.`,
+        );
+        await this.client.deleteCollection(COLLECTION);
+        await this.createCollection();
+      }
+      return;
+    }
+
+    await this.createCollection();
+  }
+
+  private async createCollection() {
+    await this.client.createCollection(COLLECTION, {
+      vectors: {
+        dense: { size: DENSE_SIZE, distance: 'Cosine' },
+      },
+      sparse_vectors: {
+        sparse: { modifier: 'idf' },
+      },
+    } as any);
+    this.logger.log(`Created collection "${COLLECTION}" with dense+sparse hybrid support`);
   }
 }

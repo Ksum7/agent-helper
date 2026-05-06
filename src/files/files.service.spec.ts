@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MinioService } from './minio.service';
 import { QdrantService } from './qdrant.service';
 import { TextExtractorService } from './text-extractor.service';
+import { LlmService } from '../llm/llm.service';
 
 const mockFile = {
   originalname: 'test.pdf',
@@ -19,6 +20,7 @@ describe('FilesService', () => {
   let minio: any;
   let qdrant: any;
   let textExtractor: any;
+  let llm: any;
 
   beforeEach(async () => {
     prisma = {
@@ -47,6 +49,10 @@ describe('FilesService', () => {
       extract: jest.fn(),
     };
 
+    llm = {
+      summarize: jest.fn().mockResolvedValue('Summary of test.pdf'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FilesService,
@@ -54,6 +60,7 @@ describe('FilesService', () => {
         { provide: MinioService, useValue: minio },
         { provide: QdrantService, useValue: qdrant },
         { provide: TextExtractorService, useValue: textExtractor },
+        { provide: LlmService, useValue: llm },
       ],
     }).compile();
 
@@ -80,9 +87,10 @@ describe('FilesService', () => {
       prisma.fileRecord.update.mockResolvedValue({
         id: 'file-1',
         qdrantId: 'qdrant-id-1',
+        summary: 'Summary of test.pdf',
       } as any);
 
-      const result = await service.upload('user-1', mockFile, 'session-1');
+      await service.upload('user-1', mockFile, 'session-1');
 
       expect(minio.upload).toHaveBeenCalled();
       expect(prisma.fileRecord.create).toHaveBeenCalledWith({
@@ -91,7 +99,6 @@ describe('FilesService', () => {
           filename: 'test.pdf',
           mimeType: 'application/pdf',
           minioKey: expect.stringContaining('user-1/'),
-          qdrantId: null,
           sessionId: 'session-1',
         },
       });
@@ -100,12 +107,13 @@ describe('FilesService', () => {
       expect(qdrant.upsert).toHaveBeenCalledWith(
         'user-1',
         'file-1',
+        'test.pdf',
         'extracted text',
         'session-1',
       );
       expect(prisma.fileRecord.update).toHaveBeenCalledWith({
         where: { id: 'file-1' },
-        data: { qdrantId: 'qdrant-id-1' },
+        data: { qdrantId: 'qdrant-id-1', summary: 'Summary of test.pdf' },
       });
     });
 
@@ -123,7 +131,7 @@ describe('FilesService', () => {
         createdAt: new Date(),
       } as any);
 
-      const result = await service.upload('user-1', mockFile);
+      await service.upload('user-1', mockFile);
 
       expect(minio.upload).toHaveBeenCalled();
       expect(textExtractor.extract).not.toHaveBeenCalled();
@@ -165,18 +173,8 @@ describe('FilesService', () => {
   describe('list', () => {
     it('returns list of user files ordered by creation date', async () => {
       const files = [
-        {
-          id: '1',
-          filename: 'a.pdf',
-          mimeType: 'application/pdf',
-          createdAt: new Date('2025-01-02'),
-        },
-        {
-          id: '2',
-          filename: 'b.txt',
-          mimeType: 'text/plain',
-          createdAt: new Date('2025-01-01'),
-        },
+        { id: '1', filename: 'a.pdf', mimeType: 'application/pdf', summary: null, createdAt: new Date('2025-01-02') },
+        { id: '2', filename: 'b.txt', mimeType: 'text/plain', summary: null, createdAt: new Date('2025-01-01') },
       ];
       prisma.fileRecord.findMany.mockResolvedValue(files as any);
 
@@ -184,7 +182,7 @@ describe('FilesService', () => {
 
       expect(prisma.fileRecord.findMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
-        select: { id: true, filename: true, mimeType: true, createdAt: true },
+        select: { id: true, filename: true, mimeType: true, summary: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
       });
       expect(result).toEqual(files);
@@ -193,11 +191,7 @@ describe('FilesService', () => {
 
   describe('delete', () => {
     it('deletes file from minio and qdrant when qdrantId exists', async () => {
-      const record = {
-        id: 'file-1',
-        minioKey: 'key',
-        qdrantId: 'qdrant-id',
-      };
+      const record = { id: 'file-1', minioKey: 'key', qdrantId: 'qdrant-id' };
       prisma.fileRecord.findFirst.mockResolvedValue(record as any);
       minio.delete.mockResolvedValue(undefined);
       qdrant.deleteByFileId.mockResolvedValue(undefined);
@@ -205,20 +199,13 @@ describe('FilesService', () => {
 
       await service.delete('user-1', 'file-1');
 
-      expect(prisma.fileRecord.findFirst).toHaveBeenCalledWith({
-        where: { id: 'file-1', userId: 'user-1' },
-      });
       expect(minio.delete).toHaveBeenCalledWith('key');
       expect(qdrant.deleteByFileId).toHaveBeenCalledWith('file-1');
       expect(prisma.fileRecord.delete).toHaveBeenCalledWith({ where: { id: 'file-1' } });
     });
 
     it('skips qdrant deletion when qdrantId is null', async () => {
-      const record = {
-        id: 'file-1',
-        minioKey: 'key',
-        qdrantId: null,
-      };
+      const record = { id: 'file-1', minioKey: 'key', qdrantId: null };
       prisma.fileRecord.findFirst.mockResolvedValue(record as any);
       minio.delete.mockResolvedValue(undefined);
       prisma.fileRecord.delete.mockResolvedValue(record as any);

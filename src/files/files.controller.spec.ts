@@ -52,6 +52,7 @@ describe('FilesController', () => {
         userId: 'user-1',
         minioKey: 'key1',
         qdrantId: null,
+        summary: null,
         createdAt: new Date(),
       };
       filesService.upload.mockResolvedValue(record as any);
@@ -71,6 +72,7 @@ describe('FilesController', () => {
         userId: 'user-1',
         minioKey: 'key1',
         qdrantId: null,
+        summary: null,
         createdAt: new Date(),
       };
       filesService.upload.mockResolvedValue(record as any);
@@ -93,6 +95,7 @@ describe('FilesController', () => {
           userId: 'user-1',
           minioKey: 'key1',
           qdrantId: null,
+          summary: null,
           createdAt: new Date(),
         },
       ];
@@ -115,6 +118,7 @@ describe('FilesController', () => {
         mimeType: 'text/plain',
         minioKey: 'k',
         qdrantId: null,
+        summary: null,
         userId: 'user-1',
         createdAt: new Date(),
       };

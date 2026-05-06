@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { StructuredTool } from '@langchain/core/tools';
 import { MemoryService } from '../../memory/memory.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { QdrantService } from '../../files/qdrant.service';
 import { searchWebTool } from './search-web.tool';
 import { browseUrlTool } from './browse-url.tool';
 import { searchUserFilesTool } from './search-user-files.tool';
@@ -17,9 +18,10 @@ export function buildTools(
   config: ConfigService,
   memoryService: MemoryService,
   prisma: PrismaService,
+  qdrant: QdrantService,
 ): StructuredTool[] {
   return [
-    searchUserFilesTool(userId, sessionId, config, httpService, prisma),
+    searchUserFilesTool(userId, sessionId, qdrant, prisma),
     searchWebTool(httpService, config),
     browseUrlTool(httpService),
     executeCodeTool(httpService, config),

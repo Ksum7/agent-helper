@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { VectorMemoryService, MemoryResult } from './vector-memory.service';
+import { VectorMemoryService, MemoryResult, MemoryType } from './vector-memory.service';
+
+export { MemoryType };
 
 @Injectable()
 export class MemoryService {
   constructor(private readonly vectorMemory: VectorMemoryService) {}
 
-  remember(userId: string, key: string, value: string) {
-    return this.vectorMemory.remember(userId, key, value);
+  remember(userId: string, key: string, value: string, type: MemoryType = MemoryType.FACT) {
+    return this.vectorMemory.remember(userId, key, value, type);
   }
 
   recall(userId: string, query: string): Promise<MemoryResult[]> {

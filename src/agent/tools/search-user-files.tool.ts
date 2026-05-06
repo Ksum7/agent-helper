@@ -1,47 +1,40 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
-import { QdrantClient } from '@qdrant/js-client-rest';
 import { PrismaService } from '../../prisma/prisma.service';
-
-const COLLECTION = 'user_files';
+import { QdrantService } from '../../files/qdrant.service';
 
 export const searchUserFilesTool = (
   userId: string,
   sessionId: string,
-  config: ConfigService,
-  httpService: HttpService,
+  qdrant: QdrantService,
   prisma: PrismaService,
-) => {
-  const client = new QdrantClient({ url: config.getOrThrow('QDRANT_URL') });
-
-  return tool(
-    async ({ query, limit }: { query: string; limit?: number }) => {
+) =>
+  tool(
+    async ({ query, limit, scope }: { query: string; limit?: number; scope?: 'session' | 'all' }) => {
       try {
         const maxResults = limit ?? 5;
-        const [semanticResults, filenameResults] = await Promise.all([
-          searchSemantic(client, query, userId, sessionId, maxResults, config, httpService),
-          searchByFilename(prisma, query, userId, sessionId, maxResults),
-        ]);
 
-        const combined = mergeResults(semanticResults, filenameResults);
+        // Explicit scope='all' skips session filter entirely.
+        // Default (session) tries session first, then auto-expands.
+        const explicitAll = scope === 'all';
+        const searchSessionId = explicitAll ? undefined : sessionId;
 
-        if (combined.length === 0) {
-          const files = await prisma.fileRecord.findMany({
-            where: { userId, sessionId },
-            select: { filename: true },
-          });
-          if (files.length > 0) {
-            return `No matching content found. Files in this session: ${files.map((f) => f.filename).join(', ')}`;
-          }
-          return 'No files uploaded in this session.';
+        const results = await hybridSearch(qdrant, prisma, userId, query, maxResults, searchSessionId);
+
+        if (results.length > 0) {
+          return formatResults(results);
         }
 
-        return combined
-          .map((r, i) => `[${i + 1}] File: ${r.filename}\nContent: ${r.text}`)
-          .join('\n\n');
+        // Auto-expand: session had no hits → search all user files
+        if (!explicitAll) {
+          const expanded = await hybridSearch(qdrant, prisma, userId, query, maxResults, undefined);
+          if (expanded.length > 0) {
+            return `No results in the current session. Found in other sessions:\n\n${formatResults(expanded)}`;
+          }
+        }
+
+        // Nothing found anywhere — show file list as a hint
+        return await buildNoResultsHint(prisma, userId, searchSessionId, explicitAll);
       } catch (error) {
         return `Error searching files: ${error instanceof Error ? error.message : 'Unknown error'}`;
       }
@@ -49,107 +42,97 @@ export const searchUserFilesTool = (
     {
       name: 'search_user_files',
       description:
-        'Search through files uploaded in this chat session to find relevant information. Returns matching file snippets with filenames.',
+        'Search through uploaded files using hybrid semantic + keyword search. ' +
+        'Automatically expands to all user files if nothing is found in the current session. ' +
+        'Use scope="all" to search all files immediately.',
       schema: z.object({
-        query: z
-          .string()
-          .describe('Search query to find relevant content in session files'),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(10)
+        query: z.string().describe('Search query to find relevant content in files'),
+        limit: z.number().int().min(1).max(10).optional().describe('Max results (default: 5)'),
+        scope: z
+          .enum(['session', 'all'])
           .optional()
-          .describe('Maximum number of results to return (default: 5)'),
+          .describe('"session" (default, auto-expands) or "all" to skip session filter immediately'),
       }),
     },
   );
-};
 
-async function searchSemantic(
-  client: QdrantClient,
-  query: string,
-  userId: string,
-  sessionId: string,
-  limit: number,
-  config: ConfigService,
-  httpService: HttpService,
-): Promise<{ fileId: string; filename: string; text: string; score: number }[]> {
-  const vector = await embedText(query, config, httpService);
-  const results = await client.search(COLLECTION, {
-    vector,
-    limit,
-    filter: {
-      must: [
-        { key: 'userId', match: { value: userId } },
-        { key: 'sessionId', match: { value: sessionId } },
-      ],
-    },
-  });
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-  return results.map((r) => {
-    const p = r.payload as { fileId: string; filename?: string; text: string };
-    return {
-      fileId: p.fileId,
-      filename: p.filename ?? 'unknown',
-      text: p.text,
-      score: r.score,
-    };
-  });
-}
-
-async function searchByFilename(
+async function hybridSearch(
+  qdrant: QdrantService,
   prisma: PrismaService,
-  query: string,
   userId: string,
-  sessionId: string,
+  query: string,
   limit: number,
-): Promise<{ fileId: string; filename: string; text: string; score: number }[]> {
-  const files = await prisma.fileRecord.findMany({
-    where: {
-      userId,
-      sessionId,
-      filename: { contains: query, mode: 'insensitive' },
-    },
-    take: limit,
-    select: { id: true, filename: true },
+  sessionId: string | undefined,
+) {
+  const [semanticPoints, filenameRows] = await Promise.all([
+    qdrant.search(userId, query, limit, sessionId),
+    prisma.fileRecord.findMany({
+      where: {
+        userId,
+        ...(sessionId ? { sessionId } : {}),
+        filename: { contains: query, mode: 'insensitive' },
+      },
+      take: limit,
+      select: { id: true, filename: true },
+    }),
+  ]);
+
+  const semantic = semanticPoints.map((r: any) => {
+    const p = r.payload as { fileId: string; filename?: string; text: string };
+    return { fileId: p.fileId, filename: p.filename ?? 'unknown', text: p.text, score: r.score as number };
   });
 
-  return files.map((f) => ({
+  const byName = filenameRows.map((f) => ({
     fileId: f.id,
     filename: f.filename,
-    text: `[File matched by name: ${f.filename}]`,
+    text: `[Matched by filename: ${f.filename}]`,
     score: 1.0,
   }));
+
+  return mergeAndSort(semantic, byName);
 }
 
-function mergeResults(
-  semantic: { fileId: string; filename: string; text: string; score: number }[],
-  filename: { fileId: string; filename: string; text: string; score: number }[],
+function mergeAndSort(
+  a: { fileId: string; filename: string; text: string; score: number }[],
+  b: { fileId: string; filename: string; text: string; score: number }[],
 ) {
   const seen = new Set<string>();
-  const merged = [...filename, ...semantic].filter((r) => {
-    if (seen.has(r.fileId + r.text)) return false;
-    seen.add(r.fileId + r.text);
-    return true;
-  });
-  return merged.sort((a, b) => b.score - a.score);
+  return [...b, ...a]
+    .filter((r) => {
+      const key = `${r.fileId}::${r.text.slice(0, 80)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => b.score - a.score);
 }
 
-async function embedText(
-  text: string,
-  config: ConfigService,
-  httpService: HttpService,
-): Promise<number[]> {
-  const embedUrl = config.getOrThrow<string>('EMBED_URL');
-  const model = config.getOrThrow<string>('EMBED_MODEL');
+function formatResults(results: { filename: string; text: string }[]) {
+  return results.map((r, i) => `[${i + 1}] ${r.filename}\n${r.text}`).join('\n\n');
+}
 
-  const { data } = await firstValueFrom(
-    httpService.post<{ data: { embedding: number[] }[] }>(
-      `${embedUrl}/embeddings`,
-      { model, input: text, truncate_prompt_tokens: 512 },
-    ),
-  );
+async function buildNoResultsHint(
+  prisma: PrismaService,
+  userId: string,
+  sessionId: string | undefined,
+  allScope: boolean,
+) {
+  const where = { userId, ...(sessionId && !allScope ? { sessionId } : {}) };
+  const files = await prisma.fileRecord.findMany({
+    where,
+    select: { filename: true },
+    take: 10,
+    orderBy: { createdAt: 'desc' },
+  });
 
-  return data.data[0].embedding;
+  if (files.length === 0) {
+    return allScope ? 'No files uploaded by this user.' : 'No files uploaded in this session.';
+  }
+
+  const list = files.map((f) => `• ${f.filename}`).join('\n');
+  return `No matching content found. Available files:\n${list}`;
 }
